@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Now Serving Display</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/7.0.5/signalr.min.js"></script>
+  <style>
+    body {
+      font-family: sans-serif;
+      text-align: center;
+      padding: 2rem;
+    }
+    h1 {
+      font-size: 4rem;
+    }
+    .admin-controls {
+      margin-top: 2rem;
+    }
+    input[type="number"] {
+      font-size: 1.5rem;
+      padding: 0.5rem;
+      width: 6rem;
+    }
+    button {
+      font-size: 1.5rem;
+      margin: 0.5rem;
+      padding: 0.5rem 1rem;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <h1>Now Serving: <span id="number">--</span></h1>
+  <button onclick="enableSound()">Enable Sound</button>
+  <audio id="ding" src="https://<yourstorage>.blob.core.windows.net/public/ding.mp3" preload="auto"></audio>
+
+  <div class="admin-controls">
+    <h2>Admin Panel</h2>
+    <input id="startNumber" type="number" placeholder="Start #" min="0" />
+    <button onclick="setNumber()">Set</button>
+    <button onclick="incrementNumber()">+1</button>
+  </div>
+
+  <script>
+    const connection = new signalR.HubConnectionBuilder()
+      .withUrl("https://<your-function-app>.azurewebsites.net/api")
+      .configureLogging(signalR.LogLevel.Information)
+      .build();
+
+    let soundEnabled = false;
+    const ding = document.getElementById("ding");
+    let currentNumber = null;
+
+    function enableSound() {
+      ding.play().then(() => { soundEnabled = true; }).catch(() => {
+        alert("Click again to enable sound");
+      });
+    }
+
+    connection.on("numberUpdated", number => {
+      document.getElementById("number").innerText = number;
+      if (soundEnabled && number !== currentNumber) {
+        ding.play();
+      }
+      currentNumber = number;
+    });
+
+    connection.start().catch(err => console.error(err.toString()));
+
+    async function sendUpdate(number) {
+      const response = await fetch("https://<your-function-app>.azurewebsites.net/api/SendServingUpdate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ number: number.toString() })
+      });
+      if (!response.ok) alert("Error updating number");
+    }
+
+    function setNumber() {
+      const val = document.getElementById("startNumber").value;
+      const parsed = parseInt(val);
+      if (!isNaN(parsed) && parsed >= 0) {
+        currentNumber = parsed;
+        sendUpdate(parsed);
+      } else {
+        alert("Enter a valid non-negative number");
+      }
+    }
+
+    function incrementNumber() {
+      if (currentNumber == null) currentNumber = 0;
+      currentNumber++;
+      sendUpdate(currentNumber);
+    }
+  </script>
+</body>
+</html>
